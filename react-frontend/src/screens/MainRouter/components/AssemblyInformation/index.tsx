@@ -1,6 +1,7 @@
 import { Book, Bookmark, Close, Configure, Contract, Down, LinkTop, Up } from "grommet-icons";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { TaxaminerDashboard } from "./components/TaxonomicAssignmentDashboard/dashboard";
 
 import {
   addBookmark,
@@ -95,6 +96,7 @@ const AssemblyInformation = () => {
 
   const [sequenceHeaderSearch, setSequenceHeaderSearch] = useState<string>("");
 
+  const [scroll, setScroll] = useState<boolean>(false);
   const [location, setLocation] = useState<string>("");
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -150,7 +152,7 @@ const AssemblyInformation = () => {
   }, [assembly?.taxonID]);
 
   useEffect(() => {
-    if (location) {
+    if (location && scroll) {
       setToggleGenomeViewer(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -624,7 +626,7 @@ const AssemblyInformation = () => {
               onClick={() => setToggleTaxaminerAnalyses((prevState) => !prevState)}
               className="mt-8 col-span-5 text-white border-b w-full px-4 py-1 font-semibold text-xl flex justify-between items-center cursor-pointer hover:bg-gray-700 rounded-t-lg hover:text-gray-200"
             >
-              <div className="w-96">Taxonomic assignment</div>
+              <div className="w-96">Taxonomic assignment (Dashboard)</div>
               <div className="text-sm">
                 {(fetchingTaxaminerAnalyses ||
                   (taxonomicAssignmentLoading && toggleTaxaminerAnalyses)) && (
@@ -638,16 +640,19 @@ const AssemblyInformation = () => {
                   <Up className="stroke-current animate-grow-y" color="blank" />
                 )}
               </div>
+
             </div>
           )}
           {taxaminerAnalyses && taxaminerAnalyses.length > 0 && (
             <div className="flex justify-center col-span-5">
               {toggleTaxaminerAnalyses && (
                 <div className="w-full h-full border-4 border-double border-gray-300 shadow animate-fade-in bg-white overflow-hidden">
-                  <TaxonomicAssignmentViewer
-                    taxaminers={taxaminerAnalyses}
-                    setTaxonomicAssignmentLoading={setTaxonomicAssignmentLoading}
-                  />
+                  <TaxaminerDashboard
+                  assembly_id = {parseInt(assemblyID!.replace(":", ""))}
+                  analyses = {taxaminerAnalyses}
+                  setLocation={setLocation}
+                  setAutoScroll={setScroll}
+                  ></TaxaminerDashboard>
                 </div>
               )}
             </div>

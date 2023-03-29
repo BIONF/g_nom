@@ -1725,6 +1725,236 @@ export function fetchTaskStatus(
     });
 }
 
+// ==== Taxaminer Datasets ==== //
+export function fetchTaxaminerDatasets (
+  assembly_id: number, 
+  taxaminer_id: number,
+  userID: number,
+  token: string
+): Promise<IResponse<ITask>> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/datasets?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+
+// ==== Taxaminer Main ==== //
+export function grepFeature (
+  annotationID: number,
+  query: string,
+  userID: number,
+  token: string
+): Promise<any> {
+  // JSON body
+  const my_body = {
+    'userID': userID,
+    'token': token,
+    'annotationID': annotationID,
+    'search': query
+  }
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/grepFeatures`,
+    {
+      method: 'POST',
+      body: JSON.stringify(my_body),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+}
+
+// ==== Taxaminer Main ==== //
+export function fetchTaxaminerMain (
+  assembly_id: number, 
+  taxaminer_id: number,
+  userID: number,
+  token: string
+): Promise<IResponse<ITask>> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/main?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+// ==== Taxaminer Metadata ==== //
+export function fetchTaxaminerMetadata (
+  assembly_id: number, 
+  taxaminer_id: number,
+  userID: number,
+  token: string
+) {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/summary?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`
+  )
+  .then(response => response.json())
+  .then((data: any) => data.payload)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+// ==== Taxaminer Plot data ==== //
+export function fetchTaxaminerScatterplot (
+  assembly_id: number, 
+  taxaminer_id: number,
+  userID: number,
+  token: string
+): Promise<any[]> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/scatterplot?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+// ==== Taxaminer PCA data ==== //
+export function fetchTaxaminerPCA (
+  assembly_id: number, 
+  taxaminer_id: number,
+  userID: number,
+  token: string
+): Promise<IResponse<ITask>> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/pca_contribution?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+// ==== Taxaminer Diamond data ==== //
+export function fetchTaxaminerDiamond (
+  assembly_id: number, 
+  taxaminer_id: number,
+  fasta_id: number,
+  userID: number,
+  token: string
+): Promise<IResponse<ITask>> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/diamond?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&qseqID=${fasta_id}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+// ==== Taxaminer Sequence data ==== //
+export function fetchTaxaminerSeq (
+  assembly_id: number, 
+  taxaminer_id: number,
+  fasta_id: string,
+  userID: number,
+  token: string
+): Promise<IResponse<ITask>> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/seq?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&fastaID=${fasta_id}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+
+// ==== fetch taXaminer user settings ==== //
+export function fetchTaxaminerSettings (
+  assembly_id: number, 
+  analysisID: number,
+  userID: number,
+  token: string
+): Promise<UserSettings> {
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/userconfig?assemblyID=${assembly_id}&analysisID=${analysisID}&userID=${userID}&token=${token}`
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+  .catch((error) => {
+    console.error(error);
+  })
+}
+
+
+// ==== Update taXaminer user settings ==== //
+export function updateTaxaminerSettings (
+  assembly_id: number, 
+  taxaminer_id: number,
+  fields: any[],
+  selection: string[],
+  userID: number,
+  token: string
+): Promise<IResponse<ITask>> {
+
+  // JSON body
+  const my_body = {
+    'fields': fields,
+    'selection': selection
+  }
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/userconfig?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(my_body),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+  .then((request) => request.json())
+  .then((data) => data)
+}
+
+
+// ==== Taxaminer FASTA download ==== //
+export function fetchTaxaminerDownload (
+  assembly_id: number, 
+  taxaminer_id: number,
+  type: string,
+  genes: any,
+  userID: number,
+  token: string
+): any {
+
+  // JSON body
+  const my_body = {
+    'genes': Array.from(genes)
+  }
+  return fetch(
+    `${process.env.REACT_APP_API_ADRESS}/taxaminer/download/fasta?assemblyID=${assembly_id}&analysisID=${taxaminer_id}&userID=${userID}&token=${token}`,
+    {
+      method: 'POST',
+      body: JSON.stringify(my_body),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    }
+  )
+  .then((res) => { return res.blob() })
+  .catch((error) => {
+    console.error(error);
+    return []
+  })
+}
+
+
 export interface ITask {
   id: string;
   status: "running" | "done" | "aborted";
@@ -1749,6 +1979,11 @@ export interface Pagination {
   range: number;
   count: number;
   pages: number;
+}
+
+export interface UserSettings {
+  selection: string[]
+  custom_fields: any[]
 }
 
 interface IErrorResponse {

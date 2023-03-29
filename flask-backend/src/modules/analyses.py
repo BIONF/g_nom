@@ -1,3 +1,5 @@
+import csv
+import os
 from os.path import basename, exists, isdir, isfile
 from subprocess import run
 from re import sub, compile
@@ -8,6 +10,10 @@ from .db_connection import connect, DB_NAME
 from .environment import BASE_PATH_TO_IMPORT, BASE_PATH_TO_STORAGE
 from .assemblies import addAssemblyTag, fetchAssemblyTagsByAssemblyID
 from .files import scanFiles
+
+import json
+
+DIAMOND_FIELDS = fields = ['assemblyID', 'analysisID', 'qseqid', 'start', 'stop']
 
 ## ============================ IMPORT AND DELETE ============================ ##
 # full import of analyses
@@ -94,6 +100,9 @@ def import_analyses(taxon, assembly_id, dataset, analyses_type, userID):
 
             run(args=["rm", "-r", new_path_to_directory])
             new_file_path = tar_dir
+        else:
+            # unzip taxaminer data in directory
+            run(["unzip", new_file_path, "-d", new_path_to_directory])
 
         import_status, error = __importAnalyses(
             analyses_id,
@@ -113,7 +122,7 @@ def import_analyses(taxon, assembly_id, dataset, analyses_type, userID):
         elif analyses_type == "fcat":
             import_status, error = __importFcat(assembly_id, analyses_id, fcat_content)
         elif analyses_type == "taxaminer":
-            import_status, error = __importTaxaminer(assembly_id, analyses_id)
+            import_status, error = __importTaxaminer(assembly_id, analyses_id, new_path_to_directory)
         elif analyses_type == "repeatmasker":
             import_status, error = __importRepeatmasker(assembly_id, analyses_id, repeatmasker_content)
         else:
@@ -150,17 +159,18 @@ def __generate_analyses_name(assembly_name, analyses_type):
     try:
         connection, cursor, error = connect()
         cursor.execute(
-            f"SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA='{DB_NAME}' AND TABLE_NAME='analyses'"
+            "SELECT MAX(id) FROM analyses"
         )
         auto_increment_counter = cursor.fetchone()[0]
+        print(auto_increment_counter)
 
         if not auto_increment_counter:
             next_id = 1
         else:
-            next_id = auto_increment_counter
+            next_id = auto_increment_counter + 1
 
-        cursor.execute("ALTER TABLE analyses AUTO_INCREMENT = %s", (next_id + 1,))
-        connection.commit()
+        # cursor.execute("ALTER TABLE analyses AUTO_INCREMENT = %s", (next_id + 1,))
+        # connection.commit()
     except Exception as err:
         return 0, 0, createNotification(message=str(err))
 
@@ -229,7 +239,6 @@ def __store_analyses(dataset, taxon, assembly_name, analyses_name, analyses_type
                 createNotification(message="Moving analyses to storage failed!"),
             )
         # add remove?
-
         # handle additional files
         if "additional_files" in dataset:
             for additional_file in dataset["additional_files"]:
@@ -532,11 +541,46 @@ def __importFcat(assemblyID, analysisID, fcatData):
 
 
 # import taXaminer
-def __importTaxaminer(assemblyID, analysisID):
+def __importTaxaminer(assemblyID, analysisID, base_path):
     try:
         connection, cursor, error = connect()
         cursor.execute("INSERT INTO analysesTaxaminer (analysisID) VALUES (%s)", (analysisID,))
         connection.commit()
+
+        # Load taxonomic hits
+        diamond_path = base_path + "taxonomic_hits.txt"
+        print(diamond_path)
+        if not os.path.isfile(diamond_path):
+            return 0, createNotification(message=f"taXaminerImportDBError: Diamond data is missing!")
+
+        # build data rows
+        # => save assemblyID, analysisID, qseqID together with the row number to index file
+        sql_rows = []
+        with open(diamond_path) as file:
+            start_index = 0
+            curr_id = ""
+            outer_index = 0
+            for i, line in enumerate(file.readlines()):
+                # primer
+                if i == 0:
+                    curr_id = line.split("\t")[0]
+                
+                # determine new id
+                next_id = line.split("\t")[0]
+                if next_id != curr_id:
+                    # start -> stop
+                    sql_rows.append((assemblyID, analysisID, curr_id, start_index, i-1))
+                    curr_id = next_id
+                    start_index = i
+                outer_index = i
+            
+            # final row
+            sql_rows.append((assemblyID, analysisID, curr_id, start_index, outer_index))
+        
+        connection, cursor, error = connect()
+        cursor.executemany("INSERT INTO taxaminerDiamond (assemblyID, analysisID, qseqID, start, stop) VALUES (%s, %s, %s, %s, %s)", sql_rows)
+        connection.commit()
+
         return 1, []
     except Exception as err:
         return 0, createNotification(message=f"taXaminerImportDBError: {str(err)}")
@@ -664,10 +708,10 @@ def deleteAnalysesByAnalysesID(analyses_id):
     try:
         connection, cursor, error = connect()
         cursor.execute(
-            "SELECT assemblies.id, assemblies.name, analyses.path FROM assemblies, analyses WHERE analyses.id=%s AND analyses.assemblyID=assemblies.id",
+            "SELECT assemblies.id, assemblies.name, analyses.path, analyses.type FROM assemblies, analyses WHERE analyses.id=%s AND analyses.assemblyID=assemblies.id",
             (analyses_id,),
         )
-        assembly_id, assembly_name, analyses_path = cursor.fetchone()
+        assembly_id, assembly_name, analyses_path, analysis_type = cursor.fetchone()
 
         cursor.execute(
             "SELECT taxa.* FROM assemblies, taxa WHERE assemblies.id=%s AND assemblies.taxonID=taxa.id",
@@ -682,7 +726,7 @@ def deleteAnalysesByAnalysesID(analyses_id):
             status, error = __deleteAnalysesEntryByAnalysesID(analyses_id)
 
         if status and taxon and assembly_name and analyses_path:
-            status, error = __deleteAnalysesFile(taxon, assembly_name, analyses_path)
+            status, error = __deleteAnalysesFile(taxon, assembly_name, analyses_path, type=analysis_type)
         else:
             return 0, error
 
@@ -697,7 +741,7 @@ def deleteAnalysesByAnalysesID(analyses_id):
 
 
 # deletes files for annotation
-def __deleteAnalysesFile(taxon, assembly_name, analyses_path):
+def __deleteAnalysesFile(taxon, assembly_name, analyses_path, type=""):
     """
     Deletes data for specific annotation.
     """
@@ -706,6 +750,11 @@ def __deleteAnalysesFile(taxon, assembly_name, analyses_path):
         path = f"{BASE_PATH_TO_STORAGE}taxa/{scientificName}"
 
         run(args=["rm", "-r", analyses_path])
+        if type == "taxaminer":
+            print("Analysis is taXaminer, deleting parent directory as well")
+            # go one folder up
+            taxaminer_folder = "/".join(analyses_path.split("/")[0:-1])
+            run(args=["rm", "-r", taxaminer_folder])
 
         return 1, createNotification("Success", "Successfully deleted analyses", "success")
     except Exception as err:
@@ -716,6 +765,7 @@ def __deleteAnalysesEntryByAnalysesID(id):
     try:
         connection, cursor, error = connect()
         cursor.execute("DELETE FROM analyses WHERE id=%s", (id,))
+        cursor.execute("DELETE FROM taxaminerDiamond WHERE analysisID=%s", (id,))
         connection.commit()
         return 1, []
     except Exception as err:
@@ -1106,6 +1156,35 @@ def fetchTaXaminerAnalysesByAssemblyID(assemblyID):
 
 
 # fetches all analyses for specific assembly
+def fetchTaXaminerPathByAssemblyID_AnalysisID(assemblyID, taxaminerID):
+    """
+    Fetch the base path of a taxaminer analysis based on assembly and analysis ID
+    """
+    try:
+        connection, cursor, error = connect()
+        if error and error["message"]:
+            return error
+
+        # taxaminer analyses
+        cursor.execute(
+            "SELECT analyses.*, analysesTaxaminer.* FROM analyses, analysesTaxaminer WHERE analyses.assemblyID=%s AND analyses.id=analysesTaxaminer.analysisID AND analysesTaxaminer.id=%s;",
+            (assemblyID, taxaminerID),
+        )
+        row_headers = [x[0] for x in cursor.description]
+        taxaminerList = [dict(zip(row_headers, x)) for x in cursor.fetchall()]
+
+        # if not len(taxaminerList):
+        #     return [], createNotification("Info", "No taXaminer analyses for this assembly", "info")
+
+        return (
+            taxaminerList,
+            [],
+        )
+    except Exception as err:
+        return [], createNotification(message=f"FetchTaXaminerAnalysesError: {str(err)}")
+
+
+# fetches all analyses for specific assembly
 def fetchRepeatmaskerAnalysesByAssemblyID(assemblyID):
     """
     Fetches Repeatmasker analyses for specific assembly.
@@ -1132,3 +1211,26 @@ def fetchRepeatmaskerAnalysesByAssemblyID(assemblyID):
         )
     except Exception as err:
         return [], createNotification(message=f"FetchRepeatmaskerAnalysesError: {str(err)}")
+
+
+## ======================== FETCH ANALYSIS SPECIFIC ========================= ##
+def fetchTaxaminerDiamond(assemblyID, analysisID, qseqid):
+    try:
+        connection, cursor, error = connect()
+        cursor.execute("SELECT * FROM taxaminerDiamond, analysesTaxaminer WHERE taxaminerDiamond.analysisID=analysesTaxaminer.analysisID AND taxaminerDiamond.assemblyID=%s AND analysesTaxaminer.id=%s AND qseqID=%s",
+        (assemblyID, analysisID, qseqid)
+        )
+        row = cursor.fetchone()
+
+        # catch no entries
+        if not row:
+            return []
+        
+        temp_dict = dict()
+        for i in range(0, 5):
+            temp_dict[DIAMOND_FIELDS[i]] = row[i]
+
+        return temp_dict
+    except Exception as err:
+        return 0, createNotification(message=str(err))
+
